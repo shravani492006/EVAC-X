@@ -8,7 +8,10 @@ import { BUILTIN_SCENARIOS } from './seed/scenarios.js';
 import { notFound, errorHandler } from './middleware/errorHandler.js';
 
 const app = express();
-app.use(cors({ origin: (process.env.CORS_ORIGIN || 'http://localhost:5173').split(',') }));
+const corsOrigin = !process.env.CORS_ORIGIN || process.env.CORS_ORIGIN === '*'
+  ? true
+  : process.env.CORS_ORIGIN.split(',').map(s => s.trim());
+app.use(cors({ origin: corsOrigin }));
 app.use(express.json({ limit: '1mb' }));
 app.use('/api', routes);
 app.use(notFound);
