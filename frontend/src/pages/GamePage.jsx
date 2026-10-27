@@ -29,11 +29,13 @@ export default function GamePage() {
   const [toast, setToast] = useState(null);
   const rendererRef = useRef(null);
   const toastTimer = useRef(null);
+  const gameSessionRef = useRef({ playerId: null, scenarioId: null });
 
   const refresh = useCallback(() => setSnap(sim.snapshot(selectedId)), [sim, selectedId]);
 
   useEffect(() => {
     setResult(null); setSaveInfo(null); setSpeedState(1); setSnap(sim.snapshot());
+    gameSessionRef.current = { playerId: null, scenarioId: null };
     sim.onEnd = (r) => {
       setLastResult(r);
       setTimeout(() => setResult(r), 900);
@@ -46,14 +48,33 @@ export default function GamePage() {
     if (!msg) return; setToast({ msg, ok }); clearTimeout(toastTimer.current); toastTimer.current = setTimeout(() => setToast(null), 1600);
   }, []);
 
-  const start = () => { sim.start(); if (mode === 'online') startGame(playerName, level.id); refresh(); };
+  const start = () => {
+    sim.start();
+    if (mode === 'online') {
+      startGame(playerName, level.id).then((res) => {
+        if (res?.playerId) gameSessionRef.current = { playerId: res.playerId, scenarioId: res.scenarioId };
+      });
+    }
+    refresh();
+  };
   const pause = () => { sim.pause(); sound.stopAlarm(); refresh(); };
   const resume = () => { sim.resume(); refresh(); };
   const restart = () => { sound.stopAlarm(); setSelectedId(null); setRunKey((k) => k + 1); };
   const setSpeed = (s) => { sim.setSpeed(s); setSpeedState(s); };
   const exitToggle = (id, open) => { const r = sim.setExitOpen(id, open); message(r.msg, r.ok); refresh(); };
   const leave = (p) => {
-    if (mode === 'online' && sim.status !== 'READY' && sim.status !== 'ENDED') savePartial({ playerName, levelId: level.id, score: Math.round(sim.score), peopleSaved: sim.evacuated, peopleLost: sim.deaths, completed: false });
+    if (mode === 'online' && sim.status !== 'READY' && sim.status !== 'ENDED') {
+      savePartial({
+        playerId: gameSessionRef.current.playerId,
+        scenarioId: gameSessionRef.current.scenarioId,
+        playerName,
+        levelId: level.id,
+        score: Math.round(sim.score),
+        peopleSaved: sim.evacuated,
+        peopleLost: sim.deaths,
+        completed: false
+      });
+    }
     go(p);
   };
 

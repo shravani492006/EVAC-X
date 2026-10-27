@@ -7,7 +7,7 @@ import { Mat3 } from '../algorithms/transform.js';
 import { circleVsRect, segmentVsRect, collisionStats, resetCollisionStats } from '../algorithms/geometry.js';
 import { mulberry32, shuffle } from '../utils/rng.js';
 
-const STEP = 0.05;            // fixed simulation step (seconds)
+export const STEP = 0.05;            // fixed simulation step (seconds)
 const FIRE_INTERVAL = 0.8;    // fire propagation tick
 const SMOKE_INTERVAL = 0.5;   // smoke propagation tick
 const PERSON_R = 4.5;
@@ -283,7 +283,12 @@ export class Simulation {
     }
     // reaction delay -----------------------------------------------------
     if (p.delay > 0) { p.delay -= dt; if (p.delay <= 0) p.needsPath = true; this._setStatus(p); return; }
-    if (p.noRoute && this.time >= p.retryAt) p.needsPath = true;
+    if (p.noRoute) {
+      const worldChanged = p.failedHazardVersion !== this.hazardVersion;
+      if ((worldChanged && this.time >= p.retryAt) || this.time >= (p.fallbackRetryAt || p.retryAt)) {
+        p.needsPath = true;
+      }
+    }
     if (!p.needsPath && !p.noRoute) {
       this._validateRoute(p);
       if (!p.needsPath) this._move(p, dt);
@@ -417,7 +422,9 @@ export class Simulation {
       if (!p.path.length) this._tryExit(p);
     } else {
       this.astarTotals.failed++;
-      p.path = []; p.noRoute = true; p.retryAt = this.time + 1.5; p.pendingReroute = true;
+      p.path = []; p.noRoute = true; p.retryAt = this.time + 1.5; p.fallbackRetryAt = this.time + 6.0;
+      p.failedHazardVersion = this.hazardVersion; p.failedSmokeVersion = this.smokeVersion;
+      p.pendingReroute = true;
       if (!p.trapPenalized) { p.trapPenalized = true; this.score -= 100; this.log('TRAPPED', `Person #${p.id} is trapped — no safe route  −100`, 'bad'); this.soundQueue.push('warning'); }
     }
   }

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { Simulation } from '../src/engine/Simulation.js';
+import { Simulation, STEP } from '../src/engine/Simulation.js';
 import { runHeadlessSync } from '../src/engine/headless.js';
 import { LEVELS } from '../src/data/levels.js';
 import { CELL, GRID_W as W } from '../src/game/constants.js';
@@ -103,3 +103,60 @@ test('Simulation mods - closed exit is never used when mods.closeExit is set', (
 
   assert.equal(res.exitUsage[closedIndex], 0);
 });
+
+test('Simulation step fidelity - runHeadlessSync defaults to STEP and matches manual step(STEP) loop', () => {
+  const level = LEVELS[1]; // Office level
+  const rHeadless = runHeadlessSync(level);
+
+  const manualSim = new Simulation(level, { headless: true });
+  manualSim.start();
+  while (manualSim.status === 'RUNNING') {
+    manualSim.step(STEP);
+  }
+  const rManual = manualSim.result;
+
+  delete rHeadless.algo.astar.ms;
+  delete rManual.algo.astar.ms;
+
+  assert.deepEqual(rHeadless, rManual);
+});
+
+test('Simulation optimization - trapped person does not re-search on retryAt if hazardVersion has not changed', () => {
+  const level = LEVELS[0];
+  const sim = new Simulation(level, { headless: true });
+  sim.start();
+
+  const person = sim.persons[0];
+  person.done = false;
+  person.delay = 0;
+  person.needsPath = true;
+
+  // Close all exits so the person becomes trapped
+  for (const exit of sim.building.exits) {
+    exit.closed = true;
+    exit.isOpen = false;
+  }
+  sim._bump();
+  sim._processPaths();
+
+  assert.equal(person.noRoute, true);
+  const initialFailed = sim.astarTotals.failed;
+  const initialCalculations = sim.routeCalculations;
+
+  // Advance time past retryAt without changing hazardVersion
+  sim.time = person.retryAt + 0.1;
+  sim._updatePerson(person, 0.05);
+
+  // Person should NOT set needsPath because hazardVersion did not change and fallback interval hasn't elapsed
+  assert.equal(person.needsPath, false);
+
+  sim._processPaths();
+  assert.equal(sim.astarTotals.failed, initialFailed);
+  assert.equal(sim.routeCalculations, initialCalculations);
+
+  // Now change hazardVersion (e.g. unblock a cell or bump)
+  sim._bump();
+  sim._updatePerson(person, 0.05);
+  assert.equal(person.needsPath, true);
+});
+

@@ -16,12 +16,12 @@ export default function WhatIf({ defaultLevelId = 'training' }) {
   const [levelId, setLevelId] = useState(defaultLevelId);
   const level = getLevel(levelId);
   const scenarios = useMemo(() => [
-    ...level.exits ? Array.from({ length: level.exits }, (_, i) => ({ id: `exit${i}`, label: `Exit ${i + 1} blocked`, mods: { closeExit: i } })) : [],
+    ...(level.exits ? Array.from({ length: level.exits }, (_, i) => ({ id: `exit${i}`, label: `Exit ${i + 1} blocked`, mods: { closeExit: i } })) : []),
     { id: 'fires', label: '+2 extra fires', mods: { extraFires: 2 } },
     { id: 'blocks', label: '10 corridor cells blocked', mods: { blockCorridors: 10 } },
     { id: 'alarm', label: 'Alarm delayed 6 s', mods: { alarmDelay: 6 } }
   ], [level]);
-  const [scId, setScId] = useState('exit0');
+  const [scId, setScId] = useState(() => (level.exits ? 'exit0' : 'fires'));
   const sc = scenarios.find((s) => s.id === scId) || scenarios[0];
   const [state, setState] = useState({ running: false, progress: 0, base: null, alt: null, error: null });
 
@@ -39,8 +39,8 @@ export default function WhatIf({ defaultLevelId = 'training' }) {
       <h3>What-if analysis</h3>
       <p className="muted" style={{ fontSize: 14, marginBottom: 12 }}>Runs the selected level twice, headless and with the same random seed — once as-is, once with a change — and compares the outcomes. With no player input, results show how the building behaves on its own.</p>
       <div className="controls">
-        <label>Level <select value={levelId} onChange={(e) => { setLevelId(e.target.value); setScId('fires'); setState({ running: false, progress: 0, base: null, alt: null }); }}>{LEVELS.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}</select></label>
-        <label>Scenario <select value={sc.id} onChange={(e) => setScId(e.target.value)}>{scenarios.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}</select></label>
+        <label>Level <select value={levelId} onChange={(e) => { const nextLvl = getLevel(e.target.value); setLevelId(e.target.value); setScId(nextLvl.exits ? 'exit0' : 'fires'); setState({ running: false, progress: 0, base: null, alt: null }); }}>{LEVELS.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}</select></label>
+        <label>Scenario <select value={sc ? sc.id : 'fires'} onChange={(e) => setScId(e.target.value)}>{scenarios.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}</select></label>
         <button className="btn primary" disabled={state.running} onClick={run}>{state.running ? `RUNNING ${Math.round(state.progress * 100)}%` : 'RUN COMPARISON'}</button>
       </div>
       {state.error && <p className="bad">Simulation error: {state.error}</p>}
