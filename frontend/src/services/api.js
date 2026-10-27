@@ -40,12 +40,18 @@ export async function savePartial(payload) {
 
 /** Save a finished game. Returns { mode: 'online' | 'local', rank? }. */
 export async function submitScore(result, playerName, mode) {
+  let effectiveMode = mode;
+  if (effectiveMode === 'checking') {
+    effectiveMode = await checkBackend();
+  }
   const body = {
     playerName, levelId: result.levelId, score: result.score, peopleSaved: result.peopleSaved, peopleLost: result.peopleLost,
     survivalRate: result.survivalRate, evacuationTime: result.evacuationTime, routeCalculations: result.routeCalculations,
     collisionCount: result.collisionCount, fireEvents: result.fireEvents
   };
-  if (mode === 'online') {
+  if (effectiveMode === 'online') {
+    try { const { data } = await api.post('/scores', body); return { mode: 'online', rank: data.rank }; } catch { /* fall through to local */ }
+  } else {
     try { const { data } = await api.post('/scores', body); return { mode: 'online', rank: data.rank }; } catch { /* fall through to local */ }
   }
   const rows = readLocal();
@@ -56,7 +62,8 @@ export async function submitScore(result, playerName, mode) {
 }
 
 export async function fetchLeaderboard(level, mode) {
-  if (mode === 'online') {
+  const effectiveMode = mode === 'checking' ? await checkBackend() : mode;
+  if (effectiveMode === 'online') {
     try {
       const { data } = await api.get('/leaderboard', { params: { level: level && level !== 'all' ? level : undefined, limit: 50 } });
       return { mode: 'online', rows: data.entries };
@@ -68,7 +75,8 @@ export async function fetchLeaderboard(level, mode) {
 }
 
 export async function fetchStats(mode) {
-  if (mode === 'online') { try { const { data } = await api.get('/stats'); return data; } catch { /* fall back */ } }
+  const effectiveMode = mode === 'checking' ? await checkBackend() : mode;
+  if (effectiveMode === 'online') { try { const { data } = await api.get('/stats'); return data; } catch { /* fall back */ } }
   const rows = [...SEED_SCORES, ...readLocal()];
   return {
     totalGames: rows.length, totalPlayers: new Set(rows.map((r) => r.player)).size,
